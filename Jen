@@ -1,0 +1,57 @@
+pipeline {
+    agent {
+        kubernetes {
+            cloud 'openshift'
+            inheritFrom 'builder'
+            defaultContainer 'builder'
+        }
+    }
+
+    parameters {
+        choice(
+            name: 'REPO_NAME',
+            choices: [
+                'https://githubfc.iad.ca.inet/Claims/claimcenter.git',
+                'https://githubfc.iad.ca.inet/Claims/contactmanager.git'
+            ],
+            description: 'Select the repository to clone'
+        )
+        string(name: 'FROM_DATE', defaultValue: '2025-04-03', description: 'Extract commits from:')
+        string(name: 'UNTIL_DATE', defaultValue: '2025-04-03', description: 'Extract commits till:')
+    }
+
+    environment {
+        BRANCH = 'release'
+        SCRIPT_TO_RUN = 'branch.sh'
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'builder-github-token', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_TOKEN')]) {
+                        def repoFolder = params.REPO_NAME.tokenize('/').last().replaceAll(/\.git$/, '')
+                        sh """
+                            git clone -b ${BRANCH} https://${GIT_USERNAME}:${GIT_TOKEN}@${params.REPO_NAME} || echo "Repo already exists"
+                            cd ${repoFolder} && git checkout ${BRANCH} && git pull && git status
+                            ls -la
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Run Script') {
+            steps {
+                script {
+                    def repoFolder = params.REPO_NAME.tokenize('/').last().replaceAll(/\.git$/, '')
+                    sh "chmod +x ${repoFolder}/${SCRIPT_TO_RUN}"
+                    dir("${repoFolder}") {
+                        sh "./${SCRIPT_TO_RUN} ${params.FROM_DATE} ${params.UNTIL_DATE} > commits_by_jira.txt"
+                    }
+                    archiveArtifacts artifacts: "${repoFolder}/commits_by_jira.txt", fingerprint: true
+                }
+            }
+        }
+    }
+}
