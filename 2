@@ -1,41 +1,45 @@
 #!/bin/bash
 
-BRANCH_NAME="main"
-START_TAG="v0.4.7.0"
-END_TAG="v0.4.8.0"
+# === CONFIGURE THESE ===
+BRANCH_NAME="develop"
+START_TAG="0.4.7.0"
+END_TAG="0.4.8.0"
 OUTPUT_FILE="jira_commit_sorted.txt"
 GIT_LOG_FORMAT="%H|%an|%ae|%ad|%s"
 
-# Checkout and fetch
-git checkout "$BRANCH_NAME"
+# === Checkout the develop branch ===
+echo "🔄 Checking out branch: $BRANCH_NAME"
+git checkout "$BRANCH_NAME" || exit 1
+
+# === Fetch all tags and commits ===
 git fetch --all --tags
 
-# Validate tags
+# === Validate tags ===
 if ! git rev-parse "$START_TAG" >/dev/null 2>&1 || ! git rev-parse "$END_TAG" >/dev/null 2>&1; then
-  echo "❌ One or both tags do not exist."
+  echo "❌ One or both tags ($START_TAG, $END_TAG) do not exist."
   exit 1
 fi
 
-# Extract commits
+# === Extract commits between the tags ===
+echo "📋 Extracting commits from $START_TAG to $END_TAG on branch $BRANCH_NAME..."
 git log "$START_TAG..$END_TAG" --pretty=format:"$GIT_LOG_FORMAT" > raw_commits.txt
 
-# Clear output
+# === Group commits by JIRA ===
+declare -A JIRA_GROUPS
 echo "===== Commits Grouped by Jira Story =====" > "$OUTPUT_FILE"
 
-declare -A JIRA_GROUPS
-
-# Grouping
 while IFS='|' read -r HASH AUTHOR EMAIL DATE MESSAGE; do
   if [[ "$MESSAGE" =~ ([A-Z]+-[0-9]+) ]]; then
     JIRA_ID="${BASH_REMATCH[1]}"
   else
     JIRA_ID="NO-JIRA"
   fi
+
   ENTRY=$'\n'"Commit: $HASH"$'\n'"Author: $AUTHOR <$EMAIL>"$'\n'"Date: $DATE"$'\n'"Message: $MESSAGE"$'\n'
   JIRA_GROUPS["$JIRA_ID"]+="$ENTRY"
 done < raw_commits.txt
 
-# Print to output file
+# === Write formatted output ===
 for JIRA in "${!JIRA_GROUPS[@]}"; do
   {
     echo
@@ -44,4 +48,4 @@ for JIRA in "${!JIRA_GROUPS[@]}"; do
   } >> "$OUTPUT_FILE"
 done
 
-echo "✅ Formatted output written to: $OUTPUT_FILE"
+echo "✅ Done. Output written to: $OUTPUT_FILE"
