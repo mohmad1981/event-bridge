@@ -1,47 +1,47 @@
 #!/bin/bash
 
-# === Configuration ===
 BRANCH_NAME="main"
 START_TAG="v0.4.7.0"
 END_TAG="v0.4.8.0"
-OUTPUT_FILE="jira_grouped_commits.txt"
+OUTPUT_FILE="jira_commit_sorted.txt"
 GIT_LOG_FORMAT="%H|%an|%ae|%ad|%s"
 
-# === Checkout and fetch ===
+# Checkout and fetch
 git checkout "$BRANCH_NAME"
 git fetch --all --tags
 
-# === Validate tags exist ===
+# Validate tags
 if ! git rev-parse "$START_TAG" >/dev/null 2>&1 || ! git rev-parse "$END_TAG" >/dev/null 2>&1; then
-  echo "❌ One or both tags do not exist: $START_TAG or $END_TAG"
+  echo "❌ One or both tags do not exist."
   exit 1
 fi
 
-# === Extract commits ===
-git log "$START_TAG..$END_TAG" --pretty=format:"$GIT_LOG_FORMAT" > commits_raw.txt
+# Extract commits
+git log "$START_TAG..$END_TAG" --pretty=format:"$GIT_LOG_FORMAT" > raw_commits.txt
 
-# === Group by JIRA ID ===
-declare -A JIRA_COMMITS
+# Clear output
+echo "===== Commits Grouped by Jira Story =====" > "$OUTPUT_FILE"
 
+declare -A JIRA_GROUPS
+
+# Grouping
 while IFS='|' read -r HASH AUTHOR EMAIL DATE MESSAGE; do
   if [[ "$MESSAGE" =~ ([A-Z]+-[0-9]+) ]]; then
     JIRA_ID="${BASH_REMATCH[1]}"
   else
-    JIRA_ID="UNCATEGORIZED"
+    JIRA_ID="NO-JIRA"
   fi
+  ENTRY=$'\n'"Commit: $HASH"$'\n'"Author: $AUTHOR <$EMAIL>"$'\n'"Date: $DATE"$'\n'"Message: $MESSAGE"$'\n'
+  JIRA_GROUPS["$JIRA_ID"]+="$ENTRY"
+done < raw_commits.txt
 
-  COMMIT_ENTRY=$'\n'"Commit: $HASH"$'\n'"Author: $AUTHOR <$EMAIL>"$'\n'"Date: $DATE"$'\n'"Message: $MESSAGE"$'\n'
-
-  # Append to the correct JIRA_ID group
-  JIRA_COMMITS["$JIRA_ID"]+="$COMMIT_ENTRY"
-done < commits_raw.txt
-
-# === Write output ===
-echo "===== Commits Grouped by Jira Story =====" > "$OUTPUT_FILE"
-
-for JIRA_ID in "${!JIRA_COMMITS[@]}"; do
-  echo -e "\n[$JIRA_ID]" >> "$OUTPUT_FILE"
-  echo -e "${JIRA_COMMITS[$JIRA_ID]}" >> "$OUTPUT_FILE"
+# Print to output file
+for JIRA in "${!JIRA_GROUPS[@]}"; do
+  {
+    echo
+    echo "[$JIRA] ----------------------------------------"
+    echo "${JIRA_GROUPS[$JIRA]}"
+  } >> "$OUTPUT_FILE"
 done
 
-echo "✅ Output saved to $OUTPUT_FILE"
+echo "✅ Formatted output written to: $OUTPUT_FILE"
