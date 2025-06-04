@@ -1,30 +1,24 @@
 #!/bin/bash
 
-# === CONFIGURE THESE ===
-BRANCH_NAME="develop"
+# === Tag comparison only ===
 START_TAG="0.4.7.0"
 END_TAG="0.4.8.0"
 OUTPUT_FILE="jira_commit_sorted.txt"
 GIT_LOG_FORMAT="%H|%an|%ae|%ad|%s"
 
-# === Checkout the develop branch ===
-echo "🔄 Checking out branch: $BRANCH_NAME"
-git checkout "$BRANCH_NAME" || exit 1
-
-# === Fetch all tags and commits ===
+# === Fetch latest tags from remote ===
 git fetch --all --tags
 
-# === Validate tags ===
+# === Check if both tags exist ===
 if ! git rev-parse "$START_TAG" >/dev/null 2>&1 || ! git rev-parse "$END_TAG" >/dev/null 2>&1; then
-  echo "❌ One or both tags ($START_TAG, $END_TAG) do not exist."
+  echo "❌ One or both tags do not exist: $START_TAG or $END_TAG"
   exit 1
 fi
 
-# === Extract commits between the tags ===
-echo "📋 Extracting commits from $START_TAG to $END_TAG on branch $BRANCH_NAME..."
+# === Get commits between the tags ===
 git log "$START_TAG..$END_TAG" --pretty=format:"$GIT_LOG_FORMAT" > raw_commits.txt
 
-# === Group commits by JIRA ===
+# === Group commits by JIRA ID ===
 declare -A JIRA_GROUPS
 echo "===== Commits Grouped by Jira Story =====" > "$OUTPUT_FILE"
 
@@ -39,7 +33,7 @@ while IFS='|' read -r HASH AUTHOR EMAIL DATE MESSAGE; do
   JIRA_GROUPS["$JIRA_ID"]+="$ENTRY"
 done < raw_commits.txt
 
-# === Write formatted output ===
+# === Write final output ===
 for JIRA in "${!JIRA_GROUPS[@]}"; do
   {
     echo
@@ -48,4 +42,4 @@ for JIRA in "${!JIRA_GROUPS[@]}"; do
   } >> "$OUTPUT_FILE"
 done
 
-echo "✅ Done. Output written to: $OUTPUT_FILE"
+echo "✅ Output saved to $OUTPUT_FILE"
