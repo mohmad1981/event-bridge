@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Variables - change as needed
+START_TAG="v0.4.8.0-alpha"
+END_TAG="v0.4.8.0"
+OUTPUT_FILE="jira_commit_output.txt"
+GIT_LOG_FORMAT="%h|%an|%ae|%ad|%s"
+
+echo "🟡 Starting commit extraction from $START_TAG to $END_TAG..."
+
+# Ensure the latest tags are available
+git fetch --all --tags
+
+# Check if tags exist
+if ! git rev-parse "$START_TAG" >/dev/null 2>&1 || ! git rev-parse "$END_TAG" >/dev/null 2>&1; then
+  echo "❌ One or both tags ($START_TAG, $END_TAG) do not exist."
+  exit 1
+fi
+
+# Extract commits between tags
+git log "$START_TAG..$END_TAG" --pretty=format:"$GIT_LOG_FORMAT" > commits_raw.txt
+
+# Group commits by JIRA ID pattern
+> "$OUTPUT_FILE"
+while IFS='|' read -r HASH AUTHOR EMAIL DATE MESSAGE; do
+  if [[ "$MESSAGE" =~ ([A-Z]+-[0-9]+) ]]; then
+    JIRA_ID="${BASH_REMATCH[1]}"
+    echo "$JIRA_ID|$HASH|$AUTHOR|$EMAIL|$DATE|$MESSAGE" >> "$OUTPUT_FILE"
+  fi
+done < commits_raw.txt
+
+# Sort and deduplicate results
+sort "$OUTPUT_FILE" | uniq > jira_commit_sorted.txt
+
+echo "✅ Commit extraction complete."
+echo "🔹 Output file: jira_commit_sorted.txt"
