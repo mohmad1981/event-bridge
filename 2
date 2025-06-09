@@ -1,5 +1,5 @@
 def repo = REPO_NAME
-if (!repo) return ["Select repository first"]
+if (!repo) return ["Select repo first"]
 
 def proc = "git ls-remote --tags ${repo}".execute()
 proc.waitFor()
@@ -11,7 +11,6 @@ def tags = proc.in.text.readLines()
     .collect { it.split("refs/tags/")[1].replaceAll("\\^\\{\\}", "") }
     .unique()
 
-// Sort tags descending (latest tag first)
 tags = tags.sort { a, b ->
     def va = a.replaceAll("[^0-9.]", "").tokenize('.')*.toInteger()
     def vb = b.replaceAll("[^0-9.]", "").tokenize('.')*.toInteger()
