@@ -1,45 +1,23 @@
-#!/bin/bash
+def repo = REPO_NAME
+if (!repo) return ["Select repository first"]
 
-# === Tag comparison only ===
-START_TAG="0.4.7.0"
-END_TAG="0.4.8.0"
-OUTPUT_FILE="jira_commit_sorted.txt"
-GIT_LOG_FORMAT="%H|%an|%ae|%ad|%s"
+def proc = "git ls-remote --tags ${repo}".execute()
+proc.waitFor()
 
-# === Fetch latest tags from remote ===
-git fetch --all --tags
+if (proc.exitValue() != 0) return ["No tags found"]
 
-# === Check if both tags exist ===
-if ! git rev-parse "$START_TAG" >/dev/null 2>&1 || ! git rev-parse "$END_TAG" >/dev/null 2>&1; then
-  echo "❌ One or both tags do not exist: $START_TAG or $END_TAG"
-  exit 1
-fi
+// Extract tags
+def tags = proc.in.text.readLines()
+    .findAll { it.contains("refs/tags/") }
+    .collect { it.split("refs/tags/")[1].replaceAll("\\^\\{\\}", "") }
+    .unique()
 
-# === Get commits between the tags ===
-git log "$START_TAG..$END_TAG" --pretty=format:"$GIT_LOG_FORMAT" > raw_commits.txt
+// Sort using semantic versioning if tags are like v1.2.3
+tags = tags.sort { a, b ->
+    def va = a.replaceAll("[^0-9.]", "").tokenize('.')*.toInteger()
+    def vb = b.replaceAll("[^0-9.]", "").tokenize('.')*.toInteger()
+    return vb <=> va
+}
 
-# === Group commits by JIRA ID ===
-declare -A JIRA_GROUPS
-echo "===== Commits Grouped by Jira Story =====" > "$OUTPUT_FILE"
-
-while IFS='|' read -r HASH AUTHOR EMAIL DATE MESSAGE; do
-  if [[ "$MESSAGE" =~ ([A-Z]+-[0-9]+) ]]; then
-    JIRA_ID="${BASH_REMATCH[1]}"
-  else
-    JIRA_ID="NO-JIRA"
-  fi
-
-  ENTRY=$'\n'"Commit: $HASH"$'\n'"Author: $AUTHOR <$EMAIL>"$'\n'"Date: $DATE"$'\n'"Message: $MESSAGE"$'\n'
-  JIRA_GROUPS["$JIRA_ID"]+="$ENTRY"
-done < raw_commits.txt
-
-# === Write final output ===
-for JIRA in "${!JIRA_GROUPS[@]}"; do
-  {
-    echo
-    echo "[$JIRA] ----------------------------------------"
-    echo "${JIRA_GROUPS[$JIRA]}"
-  } >> "$OUTPUT_FILE"
-done
-
-echo "✅ Output saved to $OUTPUT_FILE"
+// Return list with latest first (so dropdown selects it)
+return tags
