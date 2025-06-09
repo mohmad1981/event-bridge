@@ -6,18 +6,16 @@ proc.waitFor()
 
 if (proc.exitValue() != 0) return ["No tags found"]
 
-// Extract tags
 def tags = proc.in.text.readLines()
     .findAll { it.contains("refs/tags/") }
     .collect { it.split("refs/tags/")[1].replaceAll("\\^\\{\\}", "") }
     .unique()
 
-// Sort using semantic versioning if tags are like v1.2.3
+// Sort tags descending (latest tag first)
 tags = tags.sort { a, b ->
     def va = a.replaceAll("[^0-9.]", "").tokenize('.')*.toInteger()
     def vb = b.replaceAll("[^0-9.]", "").tokenize('.')*.toInteger()
     return vb <=> va
 }
 
-// Return list with latest first (so dropdown selects it)
 return tags
